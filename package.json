@@ -1,0 +1,8 @@
+{
+  "name": "rest-express-server",
+  "description": "server to handle location requests",
+  "version": "0.0.1",
+  "dependencies": {
+    "express": "*"
+  }
+}
