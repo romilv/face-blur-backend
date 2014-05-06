@@ -4,11 +4,60 @@ var app = express();
 
 
 var user = require('./user');
+var User = user.User;
 var utility = require('./utility');
+
 var data;
 var port = 4000;
 
 var DEBUG = utility.DEBUG;
+
+/*
+	CONFIGURATIONS
+	MUST BE BEFORE ROUTES
+*/
+
+app.configure(function() {
+	app.use(express.bodyParser());
+	app.use(app.router);
+});
+
+if (!DEBUG) {
+	// Send 500 if there is an internal server error in production
+	// dont send details of error over to client
+	app.use(function (err, req, res, next) {
+	    res.send(500, 'Something broke!');
+	});
+}
+
+app.listen(process.env.PORT || port);
+// console.log('listening at port ' + port);
+
+/*
+	SERIALIZATION CODE
+*/
+
+utility.readContent(function (err, content) {
+
+	data = new Array();
+
+	if (err) {
+		// error reading content
+		// create empty data array
+		// no users to prepopulate
+		console.log('error');
+		return;
+	}
+
+	// prepoulate data
+
+	for (var key in content) {
+		data[data.length] = new User(content[key].user, 
+			content[key].lat, 
+			content[key].lon);
+	}
+
+});
 
 /*
 	ROUTES
@@ -17,19 +66,32 @@ var DEBUG = utility.DEBUG;
 // get list of all users
 // to be deprecated
 app.get('/', function(req, res) {
-	res.json(data);
+
+	if (data || data.length !== 0) {
+		return res.json(data);
+	} 
+
+	else {
+		res.statusCode = 500;
+		return res.send("No user found");
+	}
+
 });
 
 // get last recorded coordinates for user with provided
 // to be deprecated
 app.get('/user/:id', function(req, res) {
 
-	for (var i = 0 ; i < data.length; i++) {
-		var u = data[i];
-		if (u.user == req.params.id) {
-			return res.json(u);
+	var reqUserId = req.params.id;
+
+	for (var key in data) {
+		// console.log(data[key]);
+		var user = data[key];
+		if (user.id === reqUserId) {
+			return res.json(user);
 		}
 	}
+
 	res.statusCode = 404;
 	return res.send('Error 404 : no user found');
 });
@@ -40,16 +102,13 @@ app.get('/user/:id/:lat/:lon', function(req, res) {
 	var lat = req.params.lat;
 	var lon = req.params.lon;
 
-	// fix the User Object
-	// var json_data = min_l2_distance(id, lat, lon);
-	// var json_data = utility.minL2Distance(id, lat, lon);
-
 	// do we need to use async callbacks?
 	var json_data = utility.minL2Distance(id, lat, lon, data);
 
 	if (json_data !== null) {
 		res.json(json_data);
-	} else {
+	} 
+	else {
 		// check statusCode and comment
 		res.statusCode = 500;
 		res.send('No user found?');
@@ -61,9 +120,10 @@ app.get('/user/:id/:lat/:lon', function(req, res) {
 app.post('/user', function(req, res) {
 
 	// check if properties have been passed properly
-	if (!req.body.hasOwnProperty('user') ||
+	if (!req.body.hasOwnProperty('id') ||
 		!req.body.hasOwnProperty('lat') || 
 		!req.body.hasOwnProperty('lon')) {
+
 
 		res.statusCode = 400;
 		return res.send('Error 400 : Post syntax is incorrect');	
@@ -75,33 +135,19 @@ app.post('/user', function(req, res) {
 		return res.send('Error 400 : invalide parameter types');
 	}
 
-	var new_user = new user(req.body.user, req.body.lat, req.body.lon);
-	console.log(new_user.getUser());
+	var newUser = new User(req.body.id, req.body.lat, req.body.lon);
+	var flagUserExists = false;
 
-	// generate new user
-	// make user class
-	// var new_user = {
-	// 	user : req.body.user,
-	// 	lat : req.body.lat,
-	// 	lon : req.body.lon,
-	// 	time : new Date()
-	// };
-
-	//
-	var flag = true;
-
-	for (var i = 0; i < data.length; i++) {
-
-		// user can be of type string, should we update to === ?
-		if (data[i].user == req.body.user) {
-			data[i] = new_user;
-			flag = false;
+	for (var i in data) {
+		if (data[i].id === req.body.id) {
+			data[i] = newUser;
+			flagUserExists = true;
 			break;
 		}
 	}
 
-	if (flag) {
-		data[data.length] = new_user;
+	if (!flagUserExists) {
+		data[data.length] = newUser;
 	}
 
 	if (DEBUG) {
@@ -114,9 +160,13 @@ app.post('/user', function(req, res) {
 
 // delete user with given id
 app.delete('/user/:id', function(req, res) {
-	for (var i = 0; i < data.length; i++) {
-		if(data[i].user == req.params.id) {
-			data.splice(i,1);
+
+	var reqUserId = req.params.id;
+
+	for (var key in data) {
+		var user = data[key];
+		if(user.id === reqUserId) {
+			data.splice(key, 1);
 
 			if (DEBUG) {
 				return res.json(data);
@@ -128,33 +178,5 @@ app.delete('/user/:id', function(req, res) {
 	}
 
 	res.statusCode = 404;
-	return res.send('Error 404 : No user found');
+	return res.send('Error 404 : No user found to delete');
 });
-
-
-/*
-	SERIALIZATION CODE
-*/
-
-
-utility.readContent(function (err, content) {
-	data = content;
-	console.log(data);
-});
-
-/*
-	INITIALIZATION CODE
-*/
-
-app.use(express.bodyParser());
-
-if (!DEBUG) {
-	// Send 500 if there is an internal server error in production
-	// dont send details of error over to client
-	app.use(function (err, req, res, next) {
-	    res.send(500, 'Something broke!');
-	});
-}
-
-app.listen(process.env.PORT || port);
-console.log('listening at port ' + port);

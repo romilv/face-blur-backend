@@ -20,17 +20,21 @@ var readContent = function(callback) {
 	OTHER HELPERS
 */
 
-var minL2Distance = function(user, lat, lon, data) {
-	var max_dist = 100;	// dummy value
+var minL2Distance = function(id, lat, lon, data) {
+	var max_dist = 100.0;	// dummy value
 	var arr_ctr = 0;
 	var dist_arr = new Array();
 
 	var flagFoundUser = false;
 
-	for (var i = 0; i < data.length; i++) {
-		if (data[i].user != user) {
-			var dist_lat = data[i].lat;
-			var dist_lon = data[i].lon;
+	for (var i in data) {
+
+		var user = data[i];
+
+		if (data[i].id !== id) {
+
+			var dist_lat = user.latitude;
+			var dist_lon = user.longitude;
 			var dist = Math.sqrt(Math.pow((dist_lat - lat), 2) + Math.pow((dist_lon - lon), 2));
 
 			if (dist <= max_dist) {
@@ -45,7 +49,8 @@ var minL2Distance = function(user, lat, lon, data) {
 			}
 			console.log('distance ' + dist);
 		}
-	}
+
+	} // end for
 
 	if (DEBUG) {
 		console.log(JSON.stringify(data[arr_ctr]));
