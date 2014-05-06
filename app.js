@@ -2,116 +2,138 @@ var express = require('express');
 var fs = require('fs');
 var app = express();
 
-app.use(express.bodyParser());
 
 var user = require('./user');
 var utility = require('./utility');
 var data;
 var port = 4000;
 
+var DEBUG = utility.DEBUG;
+
 /*
 	ROUTES
 */
 
+// get list of all users
+// to be deprecated
 app.get('/', function(req, res) {
 	res.json(data);
 });
 
+// get last recorded coordinates for user with provided
+// to be deprecated
 app.get('/user/:id', function(req, res) {
 
 	for (var i = 0 ; i < data.length; i++) {
 		var u = data[i];
 		if (u.user == req.params.id) {
-			return res.json(u);`
+			return res.json(u);
 		}
 	}
 	res.statusCode = 404;
 	return res.send('Error 404 : no user found');
 });
 
+// get the closest user to requesting user
 app.get('/user/:id/:lat/:lon', function(req, res) {
 	var id = req.params.id;
 	var lat = req.params.lat;
 	var lon = req.params.lon;
-	var json_data = min_l2_distance(id, lat, lon);
-	res.json(json_data);
+
+	// fix the User Object
+	// var json_data = min_l2_distance(id, lat, lon);
+	// var json_data = utility.minL2Distance(id, lat, lon);
+
+	// do we need to use async callbacks?
+	var json_data = utility.minL2Distance(id, lat, lon, data);
+
+	if (json_data !== null) {
+		res.json(json_data);
+	} else {
+		// check statusCode and comment
+		res.statusCode = 500;
+		res.send('No user found?');
+	}
+
 });
 
+// post new user to list or update location of currently streaming user
 app.post('/user', function(req, res) {
+
+	// check if properties have been passed properly
 	if (!req.body.hasOwnProperty('user') ||
 		!req.body.hasOwnProperty('lat') || 
 		!req.body.hasOwnProperty('lon')) {
-		// !req.body.hasOwnProperty('time')) {
-		res.statusCode = 404;
+
+		res.statusCode = 400;
 		return res.send('Error 400 : Post syntax is incorrect');	
 	}
 
-	// var new_user = new user.User(req.body.user, req.body.lat, req.body.lon);
-	// console.log(new_user.getUser());
+	// check if properties passed are of valid type
+	if (!parseFloat(req.body.lat) || !parseFloat(req.body.lon)) {
+		res.statusCode = 400;
+		return res.send('Error 400 : invalide parameter types');
+	}
 
-	var new_user = {
-		user : req.body.user,
-		lat : req.body.lat,
-		lon : req.body.lon,
-		// time : req.body.time
-		time : new Date()
-	};
+	var new_user = new user(req.body.user, req.body.lat, req.body.lon);
+	console.log(new_user.getUser());
 
+	// generate new user
+	// make user class
+	// var new_user = {
+	// 	user : req.body.user,
+	// 	lat : req.body.lat,
+	// 	lon : req.body.lon,
+	// 	time : new Date()
+	// };
+
+	//
 	var flag = true;
 
 	for (var i = 0; i < data.length; i++) {
+
+		// user can be of type string, should we update to === ?
 		if (data[i].user == req.body.user) {
 			data[i] = new_user;
 			flag = false;
+			break;
 		}
 	}
-	if (flag)
-		data[i] = new_user;
-	res.json(data);
+
+	if (flag) {
+		data[data.length] = new_user;
+	}
+
+	if (DEBUG) {
+		res.json(data);
+	}
+
+	res.statusCode = 200;
+	return res.send();
 });
 
+// delete user with given id
 app.delete('/user/:id', function(req, res) {
 	for (var i = 0; i < data.length; i++) {
 		if(data[i].user == req.params.id) {
 			data.splice(i,1);
-			return res.json(data);
+
+			if (DEBUG) {
+				return res.json(data);
+			}
+
+			res.statusCode = 200;
+			return res.send();
 		}
 	}
+
 	res.statusCode = 404;
 	return res.send('Error 404 : No user found');
 });
 
-/*
-	OTHER HELPERS
-*/
-
-var min_l2_distance = function(user, lat, lon) {
-	var max_dist = 100;	// dummy value
-	var arr_ctr = 0;
-	var dist_arr = new Array();
-	for (var i = 0; i < data.length; i++) {
-		if (data[i].user != user) {
-			var dist_lat = data[i].lat;
-			var dist_lon = data[i].lon;
-			var dist = Math.sqrt(Math.pow((dist_lat - lat), 2) + 
-				Math.pow((dist_lon - lon), 2));
-			if (dist <= max_dist) {
-				max_dist = dist;
-				arr_ctr = i;
-				// add distance object to array
-				// dist_arr[arr_ctr] = data[i];
-				// arr_ctr += 1;
-				console.log(max_dist);
-			}
-			console.log('distance ' + dist);
-		}
-	}
-	console.log(JSON.stringify(data[arr_ctr]));
-	return JSON.stringify(data[arr_ctr]);
-}
 
 /*
-	INITIALIZATION CODE
+	SERIALIZATION CODE
 */
 
 
@@ -120,6 +142,19 @@ utility.readContent(function (err, content) {
 	console.log(data);
 });
 
+/*
+	INITIALIZATION CODE
+*/
+
+app.use(express.bodyParser());
+
+if (!DEBUG) {
+	// Send 500 if there is an internal server error in production
+	// dont send details of error over to client
+	app.use(function (err, req, res, next) {
+	    res.send(500, 'Something broke!');
+	});
+}
 
 app.listen(process.env.PORT || port);
 console.log('listening at port ' + port);
