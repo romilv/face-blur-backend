@@ -20,52 +20,149 @@ var readContent = function(callback) {
 	OTHER HELPERS
 */
 
-var minL2Distance = function(id, lat, lon, data) {
-	var max_dist = 100.0;	// dummy value
-	var arr_ctr = 0;
-	var dist_arr = new Array();
+// Haversine Formula to calculate as-the-crow-flies distance
+// http://www.movable-type.co.uk/scripts/latlong.html
+// console.log(utility.getDistanceFromLatLonKm(59.3293371,13.4877472, 59.3225525,13.4619422));
+// 1.6467932911662941
+var getDistanceFromLatLonKm = function(lat1, lon1, lat2, lon2) {
 
-	var flagFoundUser = false;
+	var R = 6371;	//radius of earth in km
+	var deltaLat = degreeToRadian(lat2 - lat1);
+	var deltaLon = degreeToRadian(lon2 - lon1);
+
+	lat1 = degreeToRadian(lat1);
+	lat2 = degreeToRadian(lat2);
+
+	var a = 
+		Math.sin(deltaLat/2) * Math.sin(deltaLat/2) +
+		Math.cos(lat1) * Math.cos(lat2) * 
+		Math.sin(deltaLon/2) * Math.sin(deltaLon/2);
+
+	var c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+	var distanceKm = R * c; 
+
+	return distanceKm;
+}
+
+// lat1, lon1 are points of the user with camera
+var getBearingFromLatLonDeg = function(lat1, lon1, lat2, lon2) {
+	lat1 = degreeToRadian(lat1);
+	lon1 = degreeToRadian(lon1);
+	lat2 = degreeToRadian(lat2);
+	lon2 = degreeToRadian(lon2);
+
+	var deltaLon = (lon2 - lon1);
+
+	var y = Math.sin(deltaLon) * Math.cos(lat2);
+	var x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(deltaLon);
+	var bearing = radianToDegree(Math.atan2(y, x));
+	return 360 - ((bearing + 360) % 360);
+}
+
+var degreeToRadian = function(deg) {
+  return deg * (Math.PI / 180);
+}
+
+var radianToDegree = function(rad) {
+	return rad * (180 / Math.PI);
+}
+
+var getUsersInRange = function(id, lat, lon, data) {
+	if (DEBUG) {
+			console.log('distances');
+	}
+	
+	var MAX_DIST_METERS = 100.0;	// maximum distance in meters that the phone will look for a user
+	var candidateUsers = new Array();
+	var flagFoundUsers = false;
+
 
 	for (var i in data) {
 
 		var user = data[i];
 
-		if (data[i].id !== id) {
+		if (user.id !== id) {
 
-			var dist_lat = user.latitude;
-			var dist_lon = user.longitude;
-			var dist = Math.sqrt(Math.pow((dist_lat - lat), 2) + Math.pow((dist_lon - lon), 2));
+			var distanceInMeters = 
+				getDistanceFromLatLonKm(lat, lon, user.latitude, user.longitude) * 1000;
+			distanceInMeters = parseInt(distanceInMeters);
 
-			if (dist <= max_dist) {
-				flagFoundUser = true;
-
-				max_dist = dist;
-				arr_ctr = i;
-				// add distance object to array
-				// dist_arr[arr_ctr] = data[i];
-				// arr_ctr += 1;
-				console.log(max_dist);
+			if (distanceInMeters <= MAX_DIST_METERS) {
+				flagFoundUsers = true;
+				candidateUsers.push(user);
+				console.log(distanceInMeters);
 			}
-			console.log('distance ' + dist);
 		}
-
 	} // end for
 
-	if (DEBUG) {
-		console.log(JSON.stringify(data[arr_ctr]));
-	}
-
-	if (flagFoundUser) {
-		// stringify needed if sevearl users sent back
-		// return JSON.stringify(data[arr_ctr]);
-		return data[arr_ctr];
+	// candidate users found, parse candidates
+	if (flagFoundUsers) {
+		return candidateUsers;
 	} else {
 		return null;
 	}
+}
 
+var getUsersInDirection = function(id, lat, lon, dir, data) {
+	if (DEBUG) {
+		console.log('getUsersInDirection');
+	}
+
+	var candidateUsers = new Array();
+	var flagFoundUsers = false;
+
+	var min, max;
+	// dir can be NW, NE, SW, SE
+	// N - 360
+	// S - 180
+	// E - 270
+	// W - 90
+	switch (dir) {
+		case "NW":
+			min = 0;
+			max = 90;
+			break;
+		case "NE":
+			min = 270;
+			max = 360;
+			break;
+		case "SW":
+			min = 90;
+			max = 180;
+			break;
+		case "SE":
+			min = 180;
+			max = 270;
+	}
+
+
+	for (var i in data) {
+
+		var user = data[i];
+
+		if (user.id !== id) {
+
+			// first provide coordinates of user taking the picture
+			var bearingInDegree = 
+				getBearingFromLatLonDeg(lat, lon, user.latitude, user.longitude);
+
+			if (min <= bearingInDegree && bearingInDegree <= max) {
+				flagFoundUsers = true;
+				candidateUsers.push(user);
+				console.log(bearingInDegree);
+			}
+		}
+	} // end for
+
+	if (flagFoundUsers) {
+		return candidateUsers;
+	} else {
+		return null;
+	}
 }
 
 exports.DEBUG = DEBUG;
-exports.minL2Distance = minL2Distance;
+exports.getBearingFromLatLonDeg = getBearingFromLatLonDeg;
+exports.getUsersInDirection = getUsersInDirection;
+exports.getUsersInRange = getUsersInRange;
 exports.readContent = readContent;

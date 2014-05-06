@@ -97,23 +97,30 @@ app.get('/user/:id', function(req, res) {
 });
 
 // get the closest user to requesting user
-app.get('/user/:id/:lat/:lon', function(req, res) {
+app.get('/user/:id/:lat/:lon/:dir', function(req, res) {
 	var id = req.params.id;
 	var lat = req.params.lat;
 	var lon = req.params.lon;
+	var dir = req.params.dir;
+	var flagUserExists = false;
 
 	// do we need to use async callbacks?
-	var json_data = utility.minL2Distance(id, lat, lon, data);
+	var candidateUsers = utility.getUsersInRange(id, lat, lon, data);
 
-	if (json_data !== null) {
-		res.json(json_data);
-	} 
-	else {
+	if (candidateUsers !== null) {
+		candidateUsers = utility.getUsersInDirection(id, lat, lon, dir, candidateUsers);
+
+		if (candidateUsers !== null) {
+			res.statusCode = 200;
+			return res.json(candidateUsers);
+		}
+	}  
+	
+	if (!flagUserExists) {
 		// check statusCode and comment
 		res.statusCode = 500;
-		res.send('No user found?');
+		res.send('No user found');
 	}
-
 });
 
 // post new user to list or update location of currently streaming user
